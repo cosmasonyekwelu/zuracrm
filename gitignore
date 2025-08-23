@@ -1,0 +1,47 @@
+
+# Node / general
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.DS_Store
+Thumbs.db
+*.log
+*.pid
+*.seed
+*.swp
+coverage/
+
+# Env
+.env
+.env.*
+!/server/.env.example
+!/client/.env.example
+
+# Build outputs
+dist/
+build/
+.tmp/
+.cache/
+
+# Vite
+client/.vite/
+client/dist/
+
+# Next/React cache (safety)
+.next/
+out/
+
+# Server uploads & runtime
+server/uploads/
+server/.cache/
+
+# IDE
+.vscode/
+.idea/
+
+# Lockfiles (optional, uncomment if you want to pin by tool only)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml

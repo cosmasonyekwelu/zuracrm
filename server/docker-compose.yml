@@ -1,0 +1,25 @@
+version: "3.9"
+services:
+  api:
+    build: .
+    container_name: zura_api
+    ports: ["4000:4000"]
+    environment:
+      - NODE_ENV=production
+      - PORT=4000
+      - APP_NAME=Zura CRM API
+      - MONGO_URI=mongodb://mongo:27017/zura
+      - JWT_SECRET=supersecret_change_me
+      - JWT_EXPIRES_IN=7d
+      - CORS_ORIGIN=http://localhost:5173
+    depends_on:
+      - mongo
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    container_name: zura_mongo
+    ports: ["27017:27017"]
+    volumes:
+      - mongo_data:/data/db
+volumes:
+  mongo_data:
