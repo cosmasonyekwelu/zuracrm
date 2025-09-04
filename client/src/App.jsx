@@ -1,17 +1,19 @@
 // src/App.jsx
-import { Suspense, lazy, useEffect } from "react";
+import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext.jsx";
 import { OnboardingProvider } from "./context/OnboardingContext.jsx";
 
-// Eager pages
+// Eager pages (public)
 import Landing from "./pages/Landing.jsx";
 import SignIn from "./pages/SignIn.jsx";
 import SignUp from "./pages/SignUp.jsx";
 import Home from "./pages/Home.jsx";
 import NotFound from "./pages/NotFound.jsx";
+import Demo from "./pages/Demo.jsx";
+import Contact from "./pages/Contact.jsx";
 
-// Lazy pages
+// Lazy pages (private)
 const SearchPage        = lazy(() => import("./pages/SearchPage.jsx"));
 const Leads             = lazy(() => import("./pages/Leads.jsx"));
 const Contacts          = lazy(() => import("./pages/Contacts.jsx"));
@@ -33,7 +35,7 @@ const ConnectEmail      = lazy(() => import("./pages/setup/ConnectEmail.jsx"));
 const MigrateData       = lazy(() => import("./pages/setup/MigrateData.jsx"));
 const Integrations      = lazy(() => import("./pages/setup/Integrations.jsx"));
 
-// ✅ Settings pages (point to files that exist)
+// Settings (private)
 const PersonalSettings  = lazy(() => import("./pages/settings/PersonalSettings.jsx"));
 const Users             = lazy(() => import("./pages/settings/Users.jsx"));
 const CompanySettings   = lazy(() => import("./pages/settings/CompanySettings.jsx"));
@@ -44,7 +46,11 @@ const AuditLog          = lazy(() => import("./pages/settings/AuditLog.jsx"));
 const EmailSettings     = lazy(() => import("./pages/settings/EmailSettings.jsx"));
 
 function FullPageLoader() {
-  return <div className="container" style={{ padding: 24 }}>Loading…</div>;
+  return (
+    <div className="container" style={{ padding: 24 }}>
+      Loading…
+    </div>
+  );
 }
 
 function ScrollToTop() {
@@ -53,18 +59,46 @@ function ScrollToTop() {
   return null;
 }
 
-function PrivateRoute({ children, roles }) {
-  const { token, user, loading } = useAuth();
-  if (loading) return <FullPageLoader />;
-  if (!token) return <Navigate to="/signin" replace />;
-  if (roles?.length && !roles.includes(user?.role)) return <Navigate to="/home" replace />;
+/**
+ * RequireAuth:
+ * - Works for both token and cookie-session modes.
+ * - Does NOT call /auth/me on public pages.
+ * - On private routes, tries hydrate() once if not already authenticated.
+ */
+function RequireAuth({ roles, children }) {
+  const { user, token, isAuthenticated, hydrate, loading } = useAuth();
+  const [checking, setChecking] = useState(false);
+  const [ok, setOk] = useState(isAuthenticated);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (isAuthenticated) { setOk(true); return; }
+      setChecking(true);
+      const u = await hydrate();      // returns user or null
+      if (!alive) return;
+      setOk(Boolean(u));
+      setChecking(false);
+    })();
+    return () => { alive = false; };
+  }, [isAuthenticated, hydrate]);
+
+  if (loading || checking) return <FullPageLoader />;
+  if (!ok) return <Navigate to="/signin" replace />;
+
+  if (roles?.length && !roles.includes(user?.role)) {
+    return <Navigate to="/home" replace />;
+  }
   return children;
 }
 
+/** PublicOnly:
+ * - If already authenticated, bounce to /home.
+ */
 function PublicOnly({ children }) {
-  const { token, loading } = useAuth();
+  const { isAuthenticated, loading } = useAuth();
   if (loading) return <FullPageLoader />;
-  return token ? <Navigate to="/home" replace /> : children;
+  return isAuthenticated ? <Navigate to="/home" replace /> : children;
 }
 
 export default function App() {
@@ -75,51 +109,67 @@ export default function App() {
           <ScrollToTop />
           <Routes>
             {/* Public */}
-            <Route path="/"       element={<PublicOnly><Landing /></PublicOnly>} />
-            <Route path="/signin" element={<PublicOnly><SignIn /></PublicOnly>} />
-            <Route path="/signup" element={<PublicOnly><SignUp /></PublicOnly>} />
+            <Route path="/"         element={<PublicOnly><Landing /></PublicOnly>} />
+            <Route path="/signin"   element={<PublicOnly><SignIn /></PublicOnly>} />
+            <Route path="/signup"   element={<PublicOnly><SignUp /></PublicOnly>} />
+            <Route path="/demo"     element={<Demo />} />
+            <Route path="/contact"  element={<Contact />} />
 
-            {/* Authenticated */}
-            <Route path="/home"   element={<PrivateRoute><Home /></PrivateRoute>} />
-            <Route path="/search" element={<PrivateRoute><SearchPage /></PrivateRoute>} />
+            {/* Private - Home & Search */}
+            <Route
+              path="/home"
+              element={
+                <RequireAuth>
+                  <Home />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/search"
+              element={
+                <RequireAuth>
+                  <SearchPage />
+                </RequireAuth>
+              }
+            />
 
             {/* Core CRM */}
-            <Route path="/leads"      element={<PrivateRoute><Leads /></PrivateRoute>} />
-            <Route path="/contacts"   element={<PrivateRoute><Contacts /></PrivateRoute>} />
-            <Route path="/deals"      element={<PrivateRoute><Deals /></PrivateRoute>} />
-            <Route path="/activities" element={<PrivateRoute><Activities /></PrivateRoute>} />
-            <Route path="/tasks"      element={<PrivateRoute><Tasks /></PrivateRoute>} />
-            <Route path="/meetings"   element={<PrivateRoute><Meetings /></PrivateRoute>} />
-            <Route path="/calls"      element={<PrivateRoute><Calls /></PrivateRoute>} />
+            <Route path="/leads"      element={<RequireAuth><Leads /></RequireAuth>} />
+            <Route path="/contacts"   element={<RequireAuth><Contacts /></RequireAuth>} />
+            <Route path="/deals"      element={<RequireAuth><Deals /></RequireAuth>} />
+            <Route path="/activities" element={<RequireAuth><Activities /></RequireAuth>} />
+            <Route path="/tasks"      element={<RequireAuth><Tasks /></RequireAuth>} />
+            <Route path="/meetings"   element={<RequireAuth><Meetings /></RequireAuth>} />
+            <Route path="/calls"      element={<RequireAuth><Calls /></RequireAuth>} />
 
             {/* Catalog / Sales docs */}
-            <Route path="/products"     element={<PrivateRoute><Products /></PrivateRoute>} />
-            <Route path="/quotes"       element={<PrivateRoute><Quotes /></PrivateRoute>} />
-            <Route path="/sales-orders" element={<PrivateRoute><SalesOrder /></PrivateRoute>} />
-            <Route path="/invoices"     element={<PrivateRoute><Invoice /></PrivateRoute>} />
+            <Route path="/products"     element={<RequireAuth><Products /></RequireAuth>} />
+            <Route path="/quotes"       element={<RequireAuth><Quotes /></RequireAuth>} />
+            <Route path="/sales-orders" element={<RequireAuth><SalesOrder /></RequireAuth>} />
+            <Route path="/invoices"     element={<RequireAuth><Invoice /></RequireAuth>} />
 
             {/* Optional modules */}
-            <Route path="/forecasts" element={<PrivateRoute><Forecasts /></PrivateRoute>} />
-            <Route path="/campaigns" element={<PrivateRoute><Campaigns /></PrivateRoute>} />
-            <Route path="/documents" element={<PrivateRoute><Documents /></PrivateRoute>} />
+            <Route path="/forecasts" element={<RequireAuth><Forecasts /></RequireAuth>} />
+            <Route path="/campaigns" element={<RequireAuth><Campaigns /></RequireAuth>} />
+            <Route path="/documents" element={<RequireAuth><Documents /></RequireAuth>} />
 
             {/* Setup */}
-            <Route path="/setup/invite"       element={<PrivateRoute><InviteTeam /></PrivateRoute>} />
-            <Route path="/setup/pipeline"     element={<PrivateRoute><ConfigurePipeline /></PrivateRoute>} />
-            <Route path="/setup/email"        element={<PrivateRoute><ConnectEmail /></PrivateRoute>} />
-            <Route path="/setup/import"       element={<PrivateRoute><MigrateData /></PrivateRoute>} />
-            <Route path="/setup/integrations" element={<PrivateRoute><Integrations /></PrivateRoute>} />
+            <Route path="/setup/invite"       element={<RequireAuth><InviteTeam /></RequireAuth>} />
+            <Route path="/setup/pipeline"     element={<RequireAuth><ConfigurePipeline /></RequireAuth>} />
+            <Route path="/setup/email"        element={<RequireAuth><ConnectEmail /></RequireAuth>} />
+            <Route path="/setup/import"       element={<RequireAuth><MigrateData /></RequireAuth>} />
+            <Route path="/setup/integrations" element={<RequireAuth><Integrations /></RequireAuth>} />
 
             {/* Settings */}
             <Route path="/settings"           element={<Navigate to="/settings/personal" replace />} />
-            <Route path="/settings/personal"  element={<PrivateRoute><PersonalSettings /></PrivateRoute>} />
-            <Route path="/settings/users"     element={<PrivateRoute roles={["admin"]}><Users /></PrivateRoute>} />
-            <Route path="/settings/company"   element={<PrivateRoute roles={["admin"]}><CompanySettings /></PrivateRoute>} />
-            <Route path="/settings/calendar"  element={<PrivateRoute><CalendarSettings /></PrivateRoute>} />
-            <Route path="/settings/security"  element={<PrivateRoute roles={["admin"]}><SecurityPolicies /></PrivateRoute>} />
-            <Route path="/settings/roles"     element={<PrivateRoute roles={["admin"]}><RolesSharing /></PrivateRoute>} />
-            <Route path="/settings/audit"     element={<PrivateRoute roles={["admin"]}><AuditLog /></PrivateRoute>} />
-            <Route path="/settings/email"     element={<PrivateRoute><EmailSettings /></PrivateRoute>} />
+            <Route path="/settings/personal"  element={<RequireAuth><PersonalSettings /></RequireAuth>} />
+            <Route path="/settings/users"     element={<RequireAuth roles={["admin"]}><Users /></RequireAuth>} />
+            <Route path="/settings/company"   element={<RequireAuth roles={["admin"]}><CompanySettings /></RequireAuth>} />
+            <Route path="/settings/calendar"  element={<RequireAuth><CalendarSettings /></RequireAuth>} />
+            <Route path="/settings/security"  element={<RequireAuth roles={["admin"]}><SecurityPolicies /></RequireAuth>} />
+            <Route path="/settings/roles"     element={<RequireAuth roles={["admin"]}><RolesSharing /></RequireAuth>} />
+            <Route path="/settings/audit"     element={<RequireAuth roles={["admin"]}><AuditLog /></RequireAuth>} />
+            <Route path="/settings/email"     element={<RequireAuth><EmailSettings /></RequireAuth>} />
 
             {/* 404 */}
             <Route path="*" element={<NotFound />} />

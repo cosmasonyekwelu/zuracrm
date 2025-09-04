@@ -1,10 +1,26 @@
 // src/components/SettingsSidebar.jsx
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
+import { useCallback, useState } from "react";
 
 export default function SettingsSidebar() {
-  const nav = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, logout } = useAuth() || {};
+  const [busy, setBusy] = useState(false);
+
+  const logoutNow = useCallback(async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      // Clear client auth synchronously so guards read the correct state
+      localStorage.removeItem("auth.token");
+      if (typeof logout === "function") {
+        await logout(); // best-effort server signout if implemented
+      }
+    } finally {
+      // Hard redirect avoids any stale mounted route/effects
+      window.location.replace("/signin");
+    }
+  }, [logout, busy]);
 
   const Sec = ({ label }) => (
     <div
@@ -26,21 +42,15 @@ export default function SettingsSidebar() {
       to={to}
       className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
       style={{ display: "block" }}
+      end
     >
       {label}
     </NavLink>
   );
 
-  const logoutNow = () => {
-    logout();
-    nav("/signin", { replace: true });
-  };
-
   return (
-    <aside className="sidebar settings-sidebar">
-      <div style={{ fontWeight: 800, marginBottom: 12, letterSpacing: 0.3 }}>
-        Setup
-      </div>
+    <aside className="sidebar settings-sidebar" role="complementary" aria-label="Settings">
+      <div style={{ fontWeight: 800, marginBottom: 12, letterSpacing: 0.3 }}>Setup</div>
 
       <Sec label="General" />
       <Item to="/settings/personal" label="Personal Settings" />
@@ -59,8 +69,10 @@ export default function SettingsSidebar() {
       <Sec label="Session" />
       <Item to="/home" label="← Back to Home" />
       <button
+        type="button"
         className="nav-link"
         onClick={logoutNow}
+        disabled={busy}
         style={{
           display: "block",
           width: "100%",
@@ -68,13 +80,14 @@ export default function SettingsSidebar() {
           background: "transparent",
           border: "none",
           padding: 0,
-          cursor: "pointer",
+          cursor: busy ? "not-allowed" : "pointer",
           color: "crimson",
           fontWeight: 600,
           marginTop: 6,
+          opacity: busy ? 0.7 : 1,
         }}
       >
-        Log out
+        {busy ? "Logging out…" : "Log out"}
       </button>
 
       {user?.role !== "admin" ? null : (
